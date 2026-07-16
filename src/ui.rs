@@ -173,7 +173,7 @@ impl Buffs {
                     self.guild_buff = None;
                 }
             } else {
-                self.guild_buff = None;
+                self.guild_food = None;
             }
         }
     }
