@@ -1,6 +1,6 @@
 use std::{
     path::{Path, PathBuf},
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::Result;
@@ -80,7 +80,7 @@ impl<'a> State {
                 let text = format!("Poogie {} activated", buff_text);
                 let painted_text = Text::new(text, FontId::proportional(50.0))
                     .anchor(Align2::CENTER_TOP)
-                    .pos(vec2(0.0, max_rect.height() / 5.0))
+                    .pos(vec2(0.0, 70.0))
                     .pivot(Align2::CENTER_CENTER)
                     .background(TextBackground::new(
                         Color32::BLACK.gamma_multiply(t * 0.6),
@@ -96,7 +96,20 @@ impl<'a> State {
                 let text = format!("Poogie {} enabled", item_text);
                 let painted_text = Text::new(text, FontId::proportional(50.0))
                     .anchor(Align2::CENTER_TOP)
-                    .pos(vec2(0.0, max_rect.height() / 5.0 + 70.0))
+                    .pos(vec2(0.0, 70.0 * 2.0))
+                    .pivot(Align2::CENTER_CENTER)
+                    .background(TextBackground::new(
+                        Color32::BLACK.gamma_multiply(t * 0.6),
+                        3.0,
+                    ))
+                    .color(color);
+                painted_text.paint(painter, max_rect);
+            }
+            if self.buffs.guild_food.is_some() {
+                let text = "Guild food activated";
+                let painted_text = Text::new(text, FontId::proportional(50.0))
+                    .anchor(Align2::CENTER_TOP)
+                    .pos(vec2(0.0, 70.0 * 3.0))
                     .pivot(Align2::CENTER_CENTER)
                     .background(TextBackground::new(
                         Color32::BLACK.gamma_multiply(t * 0.6),
@@ -125,6 +138,7 @@ impl<'a> State {
 pub struct Buffs {
     pub item: Option<TorePoogieItem>,
     pub guild_buff: Option<GuildPoogieBuff>,
+    pub guild_food: Option<GuildFood>,
 }
 
 impl Buffs {
@@ -142,15 +156,25 @@ impl Buffs {
 
     fn remove_old(&mut self) {
         let limit = Duration::from_hours(12);
-        if let Some(item) = &mut self.item
+        if let Some(item) = &self.item
             && !(item.time.elapsed().is_ok_and(|elapsed| elapsed < limit))
         {
             self.item = None;
         }
-        if let Some(buff) = &mut self.guild_buff
+        if let Some(buff) = &self.guild_buff
             && !(buff.time.elapsed().is_ok_and(|elapsed| elapsed < limit))
         {
             self.guild_buff = None;
+        }
+        if let Some(food) = &self.guild_food {
+            if let Ok(now) = SystemTime::now().duration_since(UNIX_EPOCH) {
+                let now = now.as_secs() as u32;
+                if now.saturating_sub(food.timestamp) > 5400 {
+                    self.guild_buff = None;
+                }
+            } else {
+                self.guild_buff = None;
+            }
         }
     }
 }
@@ -183,6 +207,23 @@ impl GuildPoogieBuff {
             kind,
             offset,
             time: SystemTime::now(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct GuildFood {
+    pub id: u16,
+    pub skill: u16,
+    pub timestamp: u32,
+}
+
+impl GuildFood {
+    pub fn new(id: u16, skill: u16, timestamp: u32) -> Self {
+        Self {
+            id,
+            skill,
+            timestamp,
         }
     }
 }

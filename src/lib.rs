@@ -9,10 +9,11 @@ use windows::Win32::{
 use crate::plugin::{save, unload};
 
 mod address;
+mod config;
 mod hooks;
+mod mhfdat;
 mod plugin;
 mod ui;
-mod config;
 
 #[unsafe(no_mangle)]
 extern "system" fn DllMain(hinst: HINSTANCE, fdw_reason: u32, lpv_reserved: *mut ()) -> bool {
