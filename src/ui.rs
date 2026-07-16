@@ -170,7 +170,7 @@ impl Buffs {
             if let Ok(now) = SystemTime::now().duration_since(UNIX_EPOCH) {
                 let now = now.as_secs() as u32;
                 if now.saturating_sub(food.timestamp) > 5400 {
-                    self.guild_buff = None;
+                    self.guild_food = None;
                 }
             } else {
                 self.guild_food = None;
