@@ -21,11 +21,11 @@ impl Addresses {
                 poogie_item: dll + 0x61540f8,
             },
             GameMode::HighGrade => Self {
-                poogie_buff_roll: todo!(),
-                apply_tore_poogie_item: todo!(),
-                poogie_buff: todo!(),
-                available_buffs: todo!(),
-                poogie_item: todo!(),
+                poogie_buff_roll: dll + 0x7fd104,
+                apply_tore_poogie_item: dll + 0x63119d,
+                poogie_buff: dll + 0xe76bbdb,
+                available_buffs: dll + 0xe76bb23,
+                poogie_item: dll + 0xed8e898,
             },
         }
     }
