@@ -1,10 +1,13 @@
-use bunny_plugin::{PluginContext, PluginInfo, hook_builder::NoCbHookPoint, hook_cell::HookCell};
+use bunny_plugin::{
+    PluginContext, PluginInfo, bunny_ui::ui::BunnyUi, hook_builder::NoCbHookPoint,
+    hook_cell::HookCell,
+};
 use tracing::error;
 
 use crate::{
     address::Addresses,
     hooks::{self, on_lobby_update},
-    state::State,
+    ui::State,
 };
 
 const PLUGIN_NAME: &str = "Better Guild Poogie";
@@ -47,15 +50,24 @@ pub extern "C" fn init(context: PluginContext) -> PluginInfo {
 
 // Called every frame when the plugin's dropdown in the manager window is open
 #[unsafe(no_mangle)]
-pub extern "C" fn menu(_: &mut usize) {}
+pub extern "C" fn menu(ui: &mut BunnyUi) {
+    let state = unsafe { STATE.get_unchecked_mut() };
+    state.menu(ui);
+}
 
 // Called every frame
 #[unsafe(no_mangle)]
-pub extern "C" fn ui(_: &mut usize) {}
+pub extern "C" fn ui(ui: &mut BunnyUi) {
+    let state = unsafe { STATE.get_unchecked_mut() };
+    state.ui(ui);
+}
 
 // Called once per user defined autosave interval, and when the plugin is manually disabled by the user or the game is closed
 #[unsafe(no_mangle)]
-pub extern "C" fn save() {}
+pub extern "C" fn save() {
+    let state = unsafe { STATE.get_unchecked() };
+    state.save_config();
+}
 
 // Called when the plugin is manually disabled by the user
 pub fn unload() {

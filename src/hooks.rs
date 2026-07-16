@@ -3,7 +3,7 @@ use bunny_plugin::hook_builder::{NoCbHookBuilder, NoCbHookPoint};
 use ilhook::x86::{HookType, Registers};
 use tracing::{debug, error};
 
-use crate::{address::Addresses, plugin::STATE, state::Buff};
+use crate::{address::Addresses, plugin::STATE, ui::Buff};
 
 pub unsafe extern "C" fn on_lobby_update() {
     unsafe {
@@ -13,6 +13,7 @@ pub unsafe extern "C" fn on_lobby_update() {
             ptr.write(buff.kind);
             state.buff_to_apply = None;
             debug!("Applied guild poogie buff: {}", buff.kind);
+            state.reapplied = buff.kind;
         }
     }
 }
