@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::Result;
-use bunny_components::text::{Text, TextBackground, TextShadow};
+use bunny_components::text::{Text, TextBackground};
 use bunny_plugin::{
     PluginContext,
     bunny_ui::{Color32, align::Align2, paint::text::fonts::FontId, ui::BunnyUi, vec2},
@@ -23,8 +23,8 @@ pub struct State {
     pub config: Config,
     config_path: PathBuf,
     pub data_path: PathBuf,
-    pub buff_to_apply: Option<Buff>,
-    pub reapplied: u8,
+    pub buffs: Buffs,
+    pub applied: bool,
     pub notification_start: Option<Instant>,
 }
 
@@ -37,22 +37,16 @@ impl<'a> State {
         let data_path = context
             .config_dir()
             .join(format!("{}.bin", env!("CARGO_PKG_NAME")));
-        let buff_to_apply = Buff::load(&data_path).ok().and_then(|buff| {
-            const LIMIT: Duration = Duration::from_hours(12);
-            if buff.time.elapsed().is_ok_and(|dur| dur < LIMIT) {
-                Some(buff)
-            } else {
-                None
-            }
-        });
+        let mut buffs = Buffs::load(&data_path).unwrap_or_default();
+        buffs.remove_old();
         Self {
             context,
             addresses,
             config,
             config_path,
             data_path,
-            buff_to_apply,
-            reapplied: 0,
+            buffs,
+            applied: false,
             notification_start: None,
         }
     }
@@ -65,14 +59,12 @@ impl<'a> State {
     }
 
     pub fn ui(&mut self, ui: &mut BunnyUi) {
-        if self.reapplied > 0 && self.config.show_notification {
-            let notification_start = self.notification_start.get_or_insert_with(Instant::now);
+        if let Some(notification_start) = self.notification_start {
             let t = 1.0
                 - notification_start
                     .elapsed()
                     .div_duration_f32(NOTIFICATION_DUR);
             if t < 0.0 {
-                self.reapplied = 0;
                 self.notification_start = None;
                 return;
             }
@@ -80,56 +72,118 @@ impl<'a> State {
             let painter = ui.painter();
             let max_rect = ui.max_rect();
             let color = Color32::GREEN.gamma_multiply(t);
-            let buff_text = PoogieSkill::from_repr(self.reapplied)
-                .map(|kind| kind.to_string())
-                .unwrap_or_else(|| self.reapplied.to_string());
-            let text = format!("Reapplied guild poogie buff: {}", buff_text);
-            let painted_text = Text::new(text, FontId::proportional(50.0))
-                .anchor(Align2::CENTER_TOP)
-                .pos(vec2(0.0, max_rect.height() / 4.0))
-                .pivot(Align2::CENTER_CENTER)
-                .background(TextBackground::new(
-                    Color32::BLACK.gamma_multiply(t * 0.6),
-                    3.0,
-                ))
-                .color(color);
-            painted_text.paint(painter, max_rect);
+
+            if let Some(buff) = &self.buffs.guild_buff {
+                let buff_text = PoogieSkill::from_repr(buff.kind)
+                    .map(|kind| kind.to_string())
+                    .unwrap_or_else(|| buff.kind.to_string());
+                let text = format!("Poogie {} activated", buff_text);
+                let painted_text = Text::new(text, FontId::proportional(50.0))
+                    .anchor(Align2::CENTER_TOP)
+                    .pos(vec2(0.0, max_rect.height() / 5.0))
+                    .pivot(Align2::CENTER_CENTER)
+                    .background(TextBackground::new(
+                        Color32::BLACK.gamma_multiply(t * 0.6),
+                        3.0,
+                    ))
+                    .color(color);
+                painted_text.paint(painter, max_rect);
+            }
+            if let Some(item) = &self.buffs.item {
+                let item_text = PoogieItem::from_repr(item.kind)
+                    .map(|kind| kind.to_string())
+                    .unwrap_or_else(|| item.kind.to_string());
+                let text = format!("Poogie {} enabled", item_text);
+                let painted_text = Text::new(text, FontId::proportional(50.0))
+                    .anchor(Align2::CENTER_TOP)
+                    .pos(vec2(0.0, max_rect.height() / 5.0 + 70.0))
+                    .pivot(Align2::CENTER_CENTER)
+                    .background(TextBackground::new(
+                        Color32::BLACK.gamma_multiply(t * 0.6),
+                        3.0,
+                    ))
+                    .color(color);
+                painted_text.paint(painter, max_rect);
+            }
         }
     }
 
     pub fn save_config(&self) {
         if let Err(e) = self.config.save(&self.config_path) {
-            error!("Config save error: {e}");
+            error!("Config save error: {e:#?}");
+        }
+    }
+
+    pub fn save_buffs(&self) {
+        if let Err(e) = self.buffs.save(&self.data_path) {
+            error!("Buffs save error: {e:#?}")
         }
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Buff {
-    pub kind: u8,
-    pub offset: usize,
-    time: SystemTime,
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Buffs {
+    pub item: Option<TorePoogieItem>,
+    pub guild_buff: Option<GuildPoogieBuff>,
 }
 
-impl Buff {
-    pub fn new(kind: u8, offset: usize) -> Self {
-        Self {
-            kind,
-            offset,
-            time: SystemTime::now(),
-        }
-    }
-
+impl Buffs {
     fn load(path: impl AsRef<Path>) -> Result<Self> {
         let bytes = std::fs::read(path)?;
         let buff = postcard::from_bytes(&bytes)?;
         Ok(buff)
     }
 
-    pub fn save(&self, path: impl AsRef<Path>) -> Result<()> {
+    fn save(&self, path: impl AsRef<Path>) -> Result<()> {
         let bytes = postcard::to_allocvec(self)?;
         std::fs::write(path, bytes)?;
         Ok(())
+    }
+
+    fn remove_old(&mut self) {
+        let limit = Duration::from_hours(12);
+        if let Some(item) = &mut self.item
+            && !(item.time.elapsed().is_ok_and(|elapsed| elapsed < limit))
+        {
+            self.item = None;
+        }
+        if let Some(buff) = &mut self.guild_buff
+            && !(buff.time.elapsed().is_ok_and(|elapsed| elapsed < limit))
+        {
+            self.guild_buff = None;
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TorePoogieItem {
+    pub kind: u16,
+    time: SystemTime,
+}
+
+impl TorePoogieItem {
+    pub fn new(kind: u16) -> Self {
+        Self {
+            kind,
+            time: SystemTime::now(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GuildPoogieBuff {
+    pub kind: u8,
+    pub offset: usize,
+    time: SystemTime,
+}
+
+impl GuildPoogieBuff {
+    pub fn new(kind: u8, offset: usize) -> Self {
+        Self {
+            kind,
+            offset,
+            time: SystemTime::now(),
+        }
     }
 }
 
@@ -161,6 +215,31 @@ impl std::fmt::Display for PoogieSkill {
             PoogieSkill::Transportation => "Transportation",
             PoogieSkill::Trap => "Trap",
             PoogieSkill::Patience => "Patience",
+        };
+        write!(f, "{s}")
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, FromRepr)]
+#[repr(u16)]
+pub enum PoogieItem {
+    Potion = 0x7,
+    MegaPotion = 0x8,
+    Antidote = 0xB,
+    DashJuice = 0xD,
+    MaxPotion = 0x1B,
+    EnergyDrink = 0x1E,
+}
+
+impl std::fmt::Display for PoogieItem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            PoogieItem::Potion => "Potion",
+            PoogieItem::MegaPotion => "Mega Potion",
+            PoogieItem::Antidote => "Antidote",
+            PoogieItem::DashJuice => "Dash Juice",
+            PoogieItem::MaxPotion => "Max Potion",
+            PoogieItem::EnergyDrink => "Energy Drink",
         };
         write!(f, "{s}")
     }

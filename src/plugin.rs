@@ -10,7 +10,7 @@ use crate::{
     ui::State,
 };
 
-const PLUGIN_NAME: &str = "Better Guild Poogie";
+const PLUGIN_NAME: &str = "Better Buffs";
 const PLUGIN_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub static STATE: HookCell<State> = HookCell::new();
