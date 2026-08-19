@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::Result;
-use bunny_components::text::{Text, TextBackground};
+use bunny_components::{Text, TextBackground};
 use bunny_plugin::{
     PluginContext,
     bunny_ui::{Color32, align::Align2, paint::text::fonts::FontId, ui::BunnyUi, vec2},
@@ -18,7 +18,6 @@ use crate::{address::Addresses, config::Config};
 const NOTIFICATION_DUR: Duration = Duration::from_secs(6);
 
 pub struct State {
-    pub context: PluginContext,
     pub addresses: Addresses,
     pub config: Config,
     config_path: PathBuf,
@@ -29,7 +28,7 @@ pub struct State {
 }
 
 impl<'a> State {
-    pub fn new(context: PluginContext, addresses: Addresses) -> Self {
+    pub fn new(context: &PluginContext, addresses: Addresses) -> Self {
         let config_path = context
             .config_dir()
             .join(format!("{}.toml", env!("CARGO_PKG_NAME")));
@@ -40,7 +39,6 @@ impl<'a> State {
         let mut buffs = Buffs::load(&data_path).unwrap_or_default();
         buffs.remove_old();
         Self {
-            context,
             addresses,
             config,
             config_path,

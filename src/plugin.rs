@@ -18,7 +18,7 @@ static HOOKS: HookCell<Vec<NoCbHookPoint>> = HookCell::new();
 
 // Called once when the plugin is loaded
 #[unsafe(no_mangle)]
-pub extern "C" fn init(context: PluginContext) -> PluginInfo {
+pub extern "C" fn init(context: &PluginContext) -> PluginInfo {
     tracing_subscriber::fmt()
         .without_time()
         .with_ansi(false)
@@ -28,20 +28,23 @@ pub extern "C" fn init(context: PluginContext) -> PluginInfo {
     let addresses = Addresses::new(context.mhfo_info());
     let state = State::new(context, addresses);
     let state_res = STATE.set(state);
-    let mut info = PluginInfo::new(PLUGIN_NAME, PLUGIN_VERSION).with_lobby_hook(on_lobby_update);
+    let mut info = PluginInfo::new(PLUGIN_NAME, PLUGIN_VERSION)
+        .ui_menu(menu)
+        .ui_free(ui)
+        .save(save)
+        .lobby_hook(on_lobby_update);
 
     match hooks::init(&addresses) {
         Ok(hooks) => {
             let hooks_res = HOOKS.set(hooks);
             if state_res.is_err() || hooks_res.is_err() {
-                info = info
-                    .with_init_fail("State/Hooks init failed: HookCell was already initialized");
+                info = info.init_fail("State/Hooks init failed: HookCell was already initialized");
             }
             info
         }
         Err(e) => {
             let err_message = format!("Hook init error: {e:#}");
-            info = info.with_init_fail(err_message.as_str());
+            info = info.init_fail(err_message.as_str());
             error!(err_message);
             info
         }
@@ -49,21 +52,18 @@ pub extern "C" fn init(context: PluginContext) -> PluginInfo {
 }
 
 // Called every frame when the plugin's dropdown in the manager window is open
-#[unsafe(no_mangle)]
 pub extern "C" fn menu(ui: &mut BunnyUi) {
     let state = unsafe { STATE.get_unchecked_mut() };
     state.menu(ui);
 }
 
 // Called every frame
-#[unsafe(no_mangle)]
 pub extern "C" fn ui(ui: &mut BunnyUi) {
     let state = unsafe { STATE.get_unchecked_mut() };
     state.ui(ui);
 }
 
 // Called once per user defined autosave interval, and when the plugin is manually disabled by the user or the game is closed
-#[unsafe(no_mangle)]
 pub extern "C" fn save() {
     let state = unsafe { STATE.get_unchecked() };
     state.save_config();
